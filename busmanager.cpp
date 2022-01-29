@@ -736,7 +736,7 @@ void BusManager::FillEdgesRoundPrepare(const Bus& bus){
 
 	//size_t first_virt_index = last_init_id;
 	for(size_t i = 0; i < stop_count; i++){
-		std::string stop_name_cur = stops_for_bus[i];
+		std::string stop_name_cur = stops_for_bus[i]; //Test1
 
 		if(i == stop_count - 1){
 			std::string stop_name_next = stops_for_bus[0];
