@@ -68,10 +68,6 @@ BusManager& BusManager::ReadData(const std::vector<Json::Node>& node){
 				}
 			}
 
-/*			if(stop_to_buses.count(stop.name) == 0){
-				stop_to_buses.emplace(std::make_pair(stop.name, std::set<std::string>()));
-			}*/
-
 			for(const auto& [other_stop_name, other_stop_distance]: other_stops){
 				stop_distances.emplace(std::make_pair(StopPair{stop.name, other_stop_name}, other_stop_distance));
 			}
@@ -195,8 +191,13 @@ BusManager& BusManager::Read(std::istream& in){
 		}
 	}
 
+	//Заполним ребра на основе первичных данных
+	for(const auto& [_, bus]: buses){
+		FillEdgesPrepare(bus);
+	}
+
 	//Создаем справочники stop_id_to_buses, stop_id_to_stops
-	for(const auto& [stop_name, buses_for_stop]: stop_to_buses){
+	/*for(const auto& [stop_name, buses_for_stop]: stop_to_buses){
 		Graph::VertexId vertex_id = stops.at(stop_name).id;
 		std::set<std::string> buses_copy = buses_for_stop;
 
@@ -206,10 +207,7 @@ BusManager& BusManager::Read(std::istream& in){
 
 	//last_init_id = stops.size();
 
-	//Заполним ребра на основе первичных данных
-	for(const auto& [_, bus]: buses){
-		FillEdgesPrepare(bus);
-	}
+	*/
 
 	//Обходим маршруты на предмет пересадок, когда у одной остановки более одного маршрута
 	/*for(const auto& [stop_name, buses_for_stop]: stop_to_buses){
@@ -284,7 +282,7 @@ BusManager& BusManager::Read(std::istream& in){
 
 	std::copy(stop_to_transfer_for_round.begin(), stop_to_transfer_for_round.end(), std::inserter(stop_to_transfer, stop_to_transfer.end()));
 
-	if(logging){
+	/*if(logging){
 		std::cout << "stops\n";
 		for(const auto& item: stops){
 			std::cout << "[" << item.second.id << ", " << item.first << "]\n";
@@ -338,7 +336,7 @@ BusManager& BusManager::Read(std::istream& in){
 			std::cout << from << "  ---  " << to << " --- " <<  distance << "\n";
 		}
 		std::cout << "\n";
-	}
+	}*/
 	return *this;
 }
 
@@ -415,6 +413,7 @@ void BusManager::WriteResponse(std::ostream& out) const {
 			}
 		} else if(command->GetType() == CommandType::Route){
 			RouteCommand rc = *(RouteCommand*)(command.get());
+			continue;
 			if(rc.stop_from == rc.stop_to){
 				std::cout << "\t\t\"total_time\": 0,\n\t\t\"items\": []\n";
 			} else {
@@ -721,7 +720,6 @@ void BusManager::FillEdgesLinePrepare(const Bus& bus, bool forward){
 			}
 		}
 
-		//bus_to_edges[bus.name].push_back({stops.at(stop_name_1).id, stops.at(stop_name_2).id, it->second / settings.bus_velocity});
 		e.push_back({stops.at(stop_name_1).id, stops.at(stop_name_2).id, it->second / settings.bus_velocity});
 
 	} while(++i < stop_count - 1);
@@ -731,23 +729,22 @@ void BusManager::FillEdgesRoundPrepare(const Bus& bus){
 	const std::vector<std::string>& stops_for_bus = bus.stops;
 	size_t stop_count =	stops_for_bus.size();
 
+	std::unordered_map<std::string, int> stop_to_count;
+	for(const std::string stop_name: stops_for_bus){
+		stop_to_count[stop_name]++;
+	}
+
 	std::vector<Graph::Edge<double>>& e = bus_to_edges[bus.name];
 	auto it_end = stop_distances.end();
 
-	//size_t first_virt_index = last_init_id;
 	for(size_t i = 0; i < stop_count; i++){
-		std::string stop_name_cur = stops_for_bus[i]; //Test1
+		std::string stop_name_cur = stops_for_bus[i];
+		//stops.at(stop_name_cur).id
 
 		if(i == stop_count - 1){
 			std::string stop_name_next = stops_for_bus[0];
 			double distance = settings.bus_wait_time;
 			e.push_back({i, 0, distance});
-/*			size_t virt_index_cur_stop = last_init_id++;
-			stop_id_to_stops.emplace(std::make_pair(virt_index_cur_stop, stop_name_cur));
-			stop_id_to_buses[virt_index_cur_stop].emplace(bus.name);
-
-			stop_to_transfer_for_round[stop_name_cur].push_back(virt_index_cur_stop);
-			e.push_back({virt_index_cur_stop, first_virt_index, distance});*/
 		} else {
 			std::string stop_name_next = stops_for_bus[i + 1];
 
@@ -761,33 +758,11 @@ void BusManager::FillEdgesRoundPrepare(const Bus& bus){
 
 			double distance = it->second / settings.bus_velocity;
 			e.push_back({i, i + 1, distance});
-/*			size_t virt_index_cur_stop = last_init_id++;
-			stop_id_to_stops.emplace(std::make_pair(virt_index_cur_stop, stop_name_cur));
-			stop_id_to_buses[virt_index_cur_stop].emplace(bus.name);
 
-			stop_to_transfer_for_round[stop_name_cur].push_back(virt_index_cur_stop);
-			e.push_back({virt_index_cur_stop, virt_index_cur_stop + 1, distance});*/
+			if(i > 0 && stop_to_count.at(stop_name_cur) == 2){
+				e.push_back({i, i, double(settings.bus_wait_time)});
+			}
 		}
 	}
-
-	/*for(size_t i = first_virt_index + 1; i < last_init_id - 2; i++){
-		//std::cout << i << ";" << stop_id_to_stops[i] << "\n";
-		for(size_t j = i + 1; j < last_init_id - 1; j++){
-			if(stop_id_to_stops[i] == stop_id_to_stops[j]){
-				if(i + 1 == j){
-					auto it = std::find_if(e.begin(), e.end(), [i, j](const auto& item) { return item.from == i && item.to == j; });
-					if(settings.bus_wait_time < it->weight){
-						it->weight = settings.bus_wait_time;
-					}
-				} else {
-					e.push_back({i, j, double(settings.bus_wait_time)});
-					e.push_back({j, i, double(settings.bus_wait_time)});
-				}
-
-				break;
-			}
-
-		}
-	}*/
 }
 

@@ -17,7 +17,7 @@
 #include "router.h"
 
 class BusManager {
-	size_t last_init_id;
+	//size_t last_init_id;
 
 	//Название остановки с пересадкой -> несколько фиктивных остановок.
 	//Для эмуляции переходов между разными маршрутами
