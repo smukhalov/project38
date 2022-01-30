@@ -663,4 +663,15 @@ void BusManager::FillEdges(const Bus& bus){
 		bus_stop_to_vertex.insert({{bus.name, stop_name_1}, vertex_1});
 		bus_stop_to_vertex.insert({{bus.name, stop_name_2}, vertex_2});
 	}
+
+	if(!busIsLine){
+		std::string stop_name = stops_for_bus[0];
+		size_t vertex_1 = last_init_id++;
+
+		auto it = bus_stop_to_vertex.find({bus.name, stop_name});
+		size_t vertex_2 = it->second;
+
+		edges.push_back({vertex_1, vertex_2, settings.bus_wait_time});
+		vertex_to_bus_stop.insert({vertex_1, {bus.name, stop_name}});
+	}
 }
