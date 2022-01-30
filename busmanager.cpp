@@ -8,12 +8,15 @@
 #include <unordered_set>
 #include "stringhelper.h"
 
+BusManager::BusManager(): last_init_id(0)
+{}
+
 BusManager& BusManager::ReadSettings(const std::map<std::string, Json::Node>& node) {
 
 	for(const auto& [node_name, value]: node) {
 		//std::string node_name = item_map.first;
 		if(node_name == "bus_wait_time"){
-			settings.bus_wait_time = value.AsInt();
+			settings.bus_wait_time = (value.IsDouble()) ? value.AsDouble() : value.AsInt();
 		} else if(node_name == "bus_velocity") {
 			//В метрах/минуту
 			settings.bus_velocity = ((value.IsDouble()) ? value.AsDouble() : value.AsInt()) * 1000.0 / 60.0;
@@ -193,7 +196,7 @@ BusManager& BusManager::Read(std::istream& in){
 
 	//Заполним ребра на основе первичных данных
 	for(const auto& [_, bus]: buses){
-		FillEdgesPrepare(bus);
+		FillEdges(bus);
 	}
 
 	//Создаем справочники stop_id_to_buses, stop_id_to_stops
@@ -266,7 +269,7 @@ BusManager& BusManager::Read(std::istream& in){
 		}
 	}*/
 
-	for(const auto& [stop_name, v]: stop_to_transfer){
+	/*for(const auto& [stop_name, v]: stop_to_transfer){
 		size_t count = v.size();
 		//std::cout << "stop_name = " << stop_name << "; count = " << count << "\n";
 		for(size_t i = 0; i < count; i++){
@@ -281,7 +284,7 @@ BusManager& BusManager::Read(std::istream& in){
 	}
 
 	std::copy(stop_to_transfer_for_round.begin(), stop_to_transfer_for_round.end(), std::inserter(stop_to_transfer, stop_to_transfer.end()));
-
+*/
 	/*if(logging){
 		std::cout << "stops\n";
 		for(const auto& item: stops){
@@ -341,7 +344,9 @@ BusManager& BusManager::Read(std::istream& in){
 }
 
 void BusManager::WriteResponse(std::ostream& out) const {
-	size_t vertex_count = stop_id_to_stops.size();
+	throw std::invalid_argument("BusManager::WriteResponse not inpemented");
+
+	/*size_t vertex_count = stop_id_to_stops.size();
 	std::cout << "stop_id_to_stops\n";
 	for(const auto& [key, value]: stop_id_to_stops){
 		std::cout << "VertexId - " << key << ", stop_name - " << value << std::endl;
@@ -442,14 +447,15 @@ void BusManager::WriteResponse(std::ostream& out) const {
 			out << ",\n";
 		}
 	}
-	out << "\n]";
+	out << "\n]";*/
 }
 
 Route BusManager::BuildBestRoute(const RouteCommand& command,
 			const Graph::DirectedWeightedGraph<double>& graph,
 			Graph::Router<double>& router) const {
 
-	std::vector<Graph::VertexId> vertex_from_list;
+	throw std::invalid_argument("BusManager::BuildBestRoute not inpemented");
+	/*std::vector<Graph::VertexId> vertex_from_list;
 	if(auto it = stop_to_transfer.find(command.stop_from); it != stop_to_transfer.end()){
 		std::copy(it->second.begin(), it->second.end(), std::back_inserter(vertex_from_list));
 	} else {
@@ -597,7 +603,7 @@ Route BusManager::BuildBestRoute(const RouteCommand& command,
 		}
 	}
 
-	return route;
+	return route;*/
 }
 
 double BusManager::GetDistance(std::vector<std::string>::const_iterator it) const {
@@ -689,47 +695,84 @@ double BusManager::GetDistanceByGeo(const Bus& bus) const {
 	return result;
 }
 
-void BusManager::FillEdgesPrepare(const Bus& bus){
+void BusManager::FillEdges(const Bus& bus){
 	if(bus.route_type == RouteType::Line){
-		FillEdgesLinePrepare(bus, true);
-		FillEdgesLinePrepare(bus, false);
+		FillEdgesLine(bus);
+		//FillEdgesLinePrepare(bus, false);
 	} else {
-		FillEdgesRoundPrepare(bus);
+		FillEdgesRound(bus);
 	}
 }
 
-void BusManager::FillEdgesLinePrepare(const Bus& bus, bool forward){
+void BusManager::FillEdgesLine(const Bus& bus){
 	const std::vector<std::string>& stops_for_bus = bus.stops;
 	size_t stop_count =	stops_for_bus.size();
 
-	std::vector<Graph::Edge<double>>& e = bus_to_edges[bus.name];
 	auto it_end = stop_distances.end();
-	size_t i = 0;
-	do{
-		size_t first_stop = forward ? i : i + 1;
-		size_t second_stop = forward ? i + 1 : i;
+	for(size_t i = 0; i < stop_count-1; ++i ){
+		std::string stop_name_1 = stops_for_bus[i];
+		std::string stop_name_2 = stops_for_bus[i+1];
 
-		std::string stop_name_1 = stops_for_bus[first_stop];
-		std::string stop_name_2 = stops_for_bus[second_stop];
+		auto it_stop_1_2 = stop_distances.find({stop_name_1, stop_name_2});
+		auto it_stop_2_1 = stop_distances.find({stop_name_2, stop_name_1});
 
-		auto it = stop_distances.find({stop_name_1, stop_name_2});
-		if(it == it_end){
-			it = stop_distances.find({stop_name_2, stop_name_1});
-			if(it == it_end){
-				throw std::invalid_argument("distance [" + stop_name_1 + ", " + stop_name_2 + "] not found");
+		if(it_stop_1_2 == it_end && it_stop_2_1 == it_end){
+			throw std::invalid_argument("distance [" + stop_name_1 + ", " + stop_name_2 + "] not found");
+		}
+
+		double distance_1_2 = -1.0;
+		double distance_2_1 = -1.0;
+
+		if(it_stop_1_2 != it_end){
+			distance_1_2 = it_stop_1_2->second / settings.bus_velocity;
+		}
+
+		if(it_stop_2_1 != it_end){
+			distance_2_1 = it_stop_2_1->second / settings.bus_velocity;
+			if(distance_1_2 < 0){
+				distance_1_2 = distance_2_1;
+			}
+		} else {
+			distance_2_1 = distance_1_2;
+		}
+
+		assert(distance_1_2 >= 0 && distance_2_1 >= 0);
+
+		size_t vertex_1 = last_init_id++;
+		size_t vertex_2 = last_init_id++;
+
+		vertex_to_bus_stop.insert({vertex_1, {bus.name, stop_name_1}});
+		vertex_to_bus_stop.insert({vertex_2, {bus.name, stop_name_2}});
+
+		edges.push_back({vertex_1, vertex_2, distance_1_2});
+		edges.push_back({vertex_2, vertex_1, distance_2_1});
+
+		if(auto it = stop_to_vertex.find(stop_name_1); it != stop_to_vertex.end()){
+			for(const size_t other_vertex_id: it->second){
+				edges.push_back({vertex_1, other_vertex_id, settings.bus_wait_time});
+				edges.push_back({other_vertex_id, vertex_1, settings.bus_wait_time});
 			}
 		}
 
-		e.push_back({stops.at(stop_name_1).id, stops.at(stop_name_2).id, it->second / settings.bus_velocity});
+		if(auto it = stop_to_vertex.find(stop_name_2); it != stop_to_vertex.end()){
+			for(const size_t other_vertex_id: it->second){
+				edges.push_back({vertex_2, other_vertex_id, settings.bus_wait_time});
+				edges.push_back({other_vertex_id, vertex_2, settings.bus_wait_time});
+			}
+		}
 
-	} while(++i < stop_count - 1);
+		stop_to_vertex[stop_name_1].insert(vertex_1);
+		stop_to_vertex[stop_name_2].insert(vertex_2);
+	}
 }
 
-void BusManager::FillEdgesRoundPrepare(const Bus& bus){
-	const std::vector<std::string>& stops_for_bus = bus.stops;
-	size_t stop_count =	stops_for_bus.size();
+void BusManager::FillEdgesRound(const Bus& bus){
+	//const std::vector<std::string>& stops_for_bus = bus.stops;
+	//size_t stop_count =	stops_for_bus.size();
 
-	std::unordered_map<std::string, int> stop_to_count;
+	throw std::invalid_argument("BusManager::FillEdgesLinePrepare not inpemented");
+
+	/*std::unordered_map<std::string, int> stop_to_count;
 	for(const std::string stop_name: stops_for_bus){
 		stop_to_count[stop_name]++;
 	}
@@ -739,7 +782,6 @@ void BusManager::FillEdgesRoundPrepare(const Bus& bus){
 
 	for(size_t i = 0; i < stop_count; i++){
 		std::string stop_name_cur = stops_for_bus[i];
-		//stops.at(stop_name_cur).id
 
 		if(i == stop_count - 1){
 			std::string stop_name_next = stops_for_bus[0];
@@ -763,6 +805,6 @@ void BusManager::FillEdgesRoundPrepare(const Bus& bus){
 				e.push_back({i, i, double(settings.bus_wait_time)});
 			}
 		}
-	}
+	}*/
 }
 
