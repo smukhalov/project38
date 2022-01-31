@@ -48,7 +48,7 @@ struct RouteItemBus: RouteItem {
 		out << "\t\t\t\t\"type\": \"Bus\",\n";
 		out << "\t\t\t\t\"bus\": \"" << bus_number << "\",\n";
 		out << "\t\t\t\t\"span_count\": " << span_count << ",\n";
-		out << "\t\t\t\t\"time\": " << bus_move_time << "\n";
+		out << "\t\t\t\t\"time\": " << std::defaultfloat << bus_move_time << "\n";
 		out << "\t\t\t}";
 	}
 };

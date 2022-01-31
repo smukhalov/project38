@@ -22,8 +22,10 @@ int main(){
 	        std::istreambuf_iterator<char>( ),
 	        std::ostreambuf_iterator<char>(in_ss));
 
-
-	bm.Read(in_ss);
+	{
+		LOG_DURATION("bm.Read")
+		bm.Read(in_ss);
+	}
 
 	stringstream out_ss;
 	{

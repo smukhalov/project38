@@ -208,18 +208,18 @@ void BusManager::WriteResponse(std::ostream& out) const {
 	std::cout << "vertex_count - " << vertex_count << std::endl;
 	std::cout << "edges_count - " << edges.size() << std::endl;
 
-	/*std::cout << "edges list\n";*/
+	std::cout << "edges list\n";
 	for(const auto& [from, to, distance]: edges){
-		//std::cout << "from - " << from << ", to - " << to << "; distance - " << distance << std::endl;
+		std::cout << "from - " << from << ", to - " << to << "; distance - " << distance << std::endl;
 		graph.AddEdge({from, to, distance});
 	}
 
-	/*std::cout << std::endl;
+	std::cout << std::endl;
 	std::cout << "vertex_to_bus_stop count - " << vertex_to_bus_stop.size() << "\n";
 	for(const auto& [vertex_id, bus_to_stop]: vertex_to_bus_stop){
 		std::cout << "vertex_id - " << vertex_id << ", bus_to_stop.bus_number - " << bus_to_stop.bus_number
 				<< "; bus_to_stop.stop_name - " << bus_to_stop.stop_name << std::endl;
-	}*/
+	}
 
 	Graph::Router<double> router(graph);
 
@@ -260,14 +260,14 @@ void BusManager::WriteResponse(std::ostream& out) const {
 		} else if(command->GetType() == CommandType::Route){
 			RouteCommand rc = *(RouteCommand*)(command.get());
 			if(rc.stop_from == rc.stop_to){
-				std::cout << "\t\t\"total_time\": 0,\n\t\t\"items\": []\n";
+				out << "\t\t\"total_time\": 0,\n\t\t\"items\": []\n";
 			} else {
 				Route route = BuildBestRoute(rc, graph, router);
 
 				if(route.items.size() == 0){
 					out << "\t\t\"error_message\": \"not found\"\n";
 				} else {
-					out << "\t\t\"total_time\": " << route.total_time << ",\n";
+					out << "\t\t\"total_time\": " << std::defaultfloat << route.total_time << ",\n";
 
 					size_t items_count = route.items.size();
 					size_t n = 0;
@@ -480,10 +480,11 @@ void BusManager::FillEdges(const Bus& bus){
 	bool busIsLine = bus.route_type == RouteType::Line;
 
 	const std::vector<std::string>& stops_for_bus = bus.stops;
-	size_t stop_count =	stops_for_bus.size();
+	size_t stop_count = stops_for_bus.size();
+	stop_count = (busIsLine) ? (stop_count - 1) : (stop_count - 2);
 
 	auto it_end = stop_distances.end();
-	for(size_t i = 0; i < stop_count-1; ++i ){
+	for(size_t i = 0; i < stop_count; ++i ){
 		std::string stop_name_1 = stops_for_bus[i];
 		std::string stop_name_2 = stops_for_bus[i+1];
 
@@ -576,13 +577,23 @@ void BusManager::FillEdges(const Bus& bus){
 	}
 
 	if(!busIsLine){
+		//Остновка stops_for_bus.size()-2
+		std::string stop_name_m_2 = stops_for_bus[stop_count];
+
+		size_t vertex_m2 = bus_stop_to_vertex.at({bus.name, stop_name_m_2});
+
 		std::string stop_name = stops_for_bus[0];
-		size_t vertex_1 = last_init_id++;
+		//Конечная остановка с задней стороны
+		size_t vertex_m_1 = last_init_id++;
 
-		auto it = bus_stop_to_vertex.find({bus.name, stop_name});
-		size_t vertex_2 = it->second;
+		double distance = stop_distances.at({stop_name_m_2, stop_name});
 
-		edges.insert({vertex_1, vertex_2, settings.bus_wait_time});
-		vertex_to_bus_stop.insert({vertex_1, {bus.name, stop_name}});
+		edges.insert({vertex_m2, vertex_m_1, distance/settings.bus_velocity});
+		vertex_to_bus_stop.insert({vertex_m_1, {bus.name, stop_name}});
+
+		size_t vertex_0 = bus_stop_to_vertex.at({bus.name, stop_name});
+
+		edges.insert({vertex_m_1, vertex_0, settings.bus_wait_time});
+		vertex_to_bus_stop.insert({vertex_m_1, {bus.name, stop_name}});
 	}
 }
