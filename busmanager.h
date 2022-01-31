@@ -3,6 +3,7 @@
 #include <map>
 #include <vector>
 #include <set>
+#include <unordered_set>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -25,6 +26,25 @@ public:
 private:
 	size_t last_init_id;
 
+	struct BusVertex{
+		std::string bus_name;
+		size_t vertex_id;
+
+		bool operator == (const BusVertex& other) const {
+					return bus_name == other.bus_name && vertex_id == other.vertex_id;
+				}
+	};
+
+	struct BusVertexHasher {
+		size_t operator() (const BusVertex& bv) const {
+			size_t x = 2'946'901;
+			return shash(bv.bus_name) * x + size_t_hash(bv.vertex_id);
+		}
+
+		std::hash<std::string> shash;
+		std::hash<size_t> size_t_hash;
+	};
+
 	struct BusStop{
 		std::string bus_number;
 		std::string stop_name;
@@ -46,9 +66,28 @@ private:
 	std::unordered_map<size_t, BusStop> vertex_to_bus_stop;
 	std::unordered_map<BusStop, size_t, BusStopHasher> bus_stop_to_vertex;
 
-	std::unordered_map<std::string, std::set<size_t>> stop_to_vertex;
+	std::unordered_map<std::string, std::unordered_set<BusVertex, BusVertexHasher>> stop_to_bus_vertex;
 
-	std::vector<Graph::Edge<double>> edges;
+	struct Edge {
+	    size_t from;
+	    size_t to;
+	    double distance;
+
+	    bool operator == (const Edge& other) const {
+			return from == other.from && to == other.to;
+		}
+	  };
+
+	struct EdgeHasher {
+		size_t operator() (const Edge& e) const {
+			size_t x = 2'946'901;
+			return shash(e.from) * x + shash(e.to);
+		}
+
+		std::hash<std::size_t> shash;
+	};
+
+	std::unordered_set<Edge, EdgeHasher> edges;
 
 	RoutingSettings settings;
 	std::unordered_map<std::string, Bus> buses;
