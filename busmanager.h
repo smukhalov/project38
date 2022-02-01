@@ -46,21 +46,23 @@ private:
 	};
 
 	struct BusStop{
-		std::string bus_number;
+		std::string bus_name;
+		size_t stop_id;
 		std::string stop_name;
 
 		bool operator == (const BusStop& other) const {
-			return bus_number == other.bus_number && stop_name == other.stop_name;
+			return bus_name == other.bus_name && stop_id == other.stop_id;
 		}
 	};
 
 	struct BusStopHasher {
 		size_t operator() (const BusStop& bs) const {
 			size_t x = 2'946'901;
-			return shash(bs.bus_number) * x + shash(bs.stop_name);
+			return shash(bs.bus_name) * x + size_t_hash(bs.stop_id);
 		}
 
 		std::hash<std::string> shash;
+		std::hash<size_t> size_t_hash;
 	};
 
 	std::unordered_map<size_t, BusStop> vertex_to_bus_stop;
@@ -109,7 +111,8 @@ private:
 		const Graph::DirectedWeightedGraph<double>& graph,
 		Graph::Router<double>& router) const;
 
-	void FillEdges(const Bus& bus);
+	void FillEdgesLine(const Bus& bus);
+	void FillEdgesRound(const Bus& bus);
 
 	double GetDistance(std::vector<std::string>::const_iterator it) const;
 

@@ -5,12 +5,17 @@
 #include "stop.h"
 
 struct Bus {
+	struct Stop{
+		size_t stop_id;
+		std::string stop_name;
+	};
+
 	std::string name;
-	std::vector<std::string> stops;
+	size_t unique_stops_count;
+	std::vector<Stop> stops;
 	RouteType route_type;
 
 	const size_t GetSize() const;
-	const size_t GetUniqueSize() const;
 };
 
 
