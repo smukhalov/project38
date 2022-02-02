@@ -25,6 +25,7 @@ public:
 
 private:
 	size_t last_init_id;
+	bool logging = true;
 
 	struct BusVertex{
 		std::string bus_name;

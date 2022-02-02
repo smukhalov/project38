@@ -211,18 +211,41 @@ void BusManager::WriteResponse(std::ostream& out) const {
 	std::cout << "vertex_count - " << vertex_count << std::endl;
 	std::cout << "edges_count - " << edges.size() << std::endl;
 
-	/*std::cout << "edges list\n";*/
+	if(logging){
+		std::cout << "edges list\n";
+	}
 	for(const auto& [from, to, distance]: edges){
-		//std::cout << "from - " << from << ", to - " << to << "; distance - " << distance << std::endl;
+		if(logging){
+			std::cout << "from - " << from << ", to - " << to << "; distance - " << distance << std::endl;
+		}
 		graph.AddEdge({from, to, distance});
 	}
 
-	/*std::cout << std::endl;
-	std::cout << "vertex_to_bus_stop count - " << vertex_to_bus_stop.size() << "\n";
-	for(const auto& [vertex_id, bus_to_stop]: vertex_to_bus_stop){
-		std::cout << "vertex_id - " << vertex_id << ", bus_to_stop.bus_name - " << bus_to_stop.bus_name
-				<< "; bus_to_stop_name - " << bus_to_stop.stop_name << std::endl;
-	}*/
+	if(logging){
+		std::cout << std::endl;
+		std::cout << "vertex_to_bus_stop count - " << vertex_to_bus_stop.size() << "\n";
+		for(const auto& [vertex_id, bus_to_stop]: vertex_to_bus_stop){
+			std::cout << "vertex_id - " << vertex_id << ", bus_to_stop.bus_name - " << bus_to_stop.bus_name
+					<< "; bus_to_stop_name - " << bus_to_stop.stop_name << std::endl;
+		}
+
+		std::cout << std::endl;
+		std::cout << "stop_to_bus_vertex count - " << stop_to_bus_vertex.size() << "\n";
+		for(const auto& [stop_name, bus_vertex_set]: stop_to_bus_vertex){
+			std::cout << "stop_name - " << stop_name  << std::endl;
+			for(const auto& bus_vertex: bus_vertex_set){
+				std::cout << "\t\t" << "vertex_id - " << bus_vertex.vertex_id << "; bus_name - " << bus_vertex.bus_name << std::endl;
+			}
+		}
+
+		std::cout << std::endl;
+		std::cout << "bus_stop_to_vertex count - " << bus_stop_to_vertex.size() << "\n";
+		for(const auto& [bus_stop, vertex_id]: bus_stop_to_vertex){
+			std::cout << "vertex_id - " << vertex_id << ", bus_name - " << bus_stop.bus_name
+					<< "; stop_id - " << bus_stop.stop_id
+					<< "; stop_name - " << bus_stop.stop_name << std::endl;
+		}
+	}
 
 	Graph::Router<double> router(graph);
 	//return;
@@ -659,9 +682,9 @@ void BusManager::FillEdgesRound(const Bus& bus){
 
 		if(auto it = stop_to_bus_vertex.find(stop_name_1); it != stop_to_bus_vertex.end()){
 			for(const BusVertex bus_vertex: it->second){
-				if(bus_vertex.bus_name == bus.name
-						&& (vertex_1 + 1 == bus_vertex.vertex_id
-							|| vertex_1 == bus_vertex.vertex_id || vertex_1 - 1 == bus_vertex.vertex_id)){
+				if(bus_vertex.bus_name == bus.name && vertex_1 == bus_vertex.vertex_id){
+						/*&& (vertex_1 + 1 == bus_vertex.vertex_id
+							|| vertex_1 == bus_vertex.vertex_id || vertex_1 - 1 == bus_vertex.vertex_id)){*/
 					continue;
 				}
 
@@ -672,9 +695,9 @@ void BusManager::FillEdgesRound(const Bus& bus){
 
 		if(auto it = stop_to_bus_vertex.find(stop_name_2); it != stop_to_bus_vertex.end()){
 			for(const BusVertex bus_vertex: it->second){
-				if(bus_vertex.bus_name == bus.name
-						&& (vertex_2 + 1 == bus_vertex.vertex_id
-							|| vertex_2 == bus_vertex.vertex_id || vertex_2 - 1 == bus_vertex.vertex_id)){
+				if(bus_vertex.bus_name == bus.name && vertex_2 == bus_vertex.vertex_id){
+						/*&& (vertex_2 + 1 == bus_vertex.vertex_id
+							|| vertex_2 == bus_vertex.vertex_id || vertex_2 - 1 == bus_vertex.vertex_id)){*/
 					continue;
 				}
 
