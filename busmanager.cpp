@@ -211,22 +211,24 @@ void BusManager::WriteResponse(std::ostream& out) const {
 	std::cout << "vertex_count - " << vertex_count << std::endl;
 	std::cout << "edges_count - " << edges.size() << std::endl;
 
-	std::cout << "edges list\n";
+	/*std::cout << "edges list\n";*/
 	for(const auto& [from, to, distance]: edges){
-		std::cout << "from - " << from << ", to - " << to << "; distance - " << distance << std::endl;
+		//std::cout << "from - " << from << ", to - " << to << "; distance - " << distance << std::endl;
 		graph.AddEdge({from, to, distance});
 	}
 
-	std::cout << std::endl;
+	/*std::cout << std::endl;
 	std::cout << "vertex_to_bus_stop count - " << vertex_to_bus_stop.size() << "\n";
 	for(const auto& [vertex_id, bus_to_stop]: vertex_to_bus_stop){
 		std::cout << "vertex_id - " << vertex_id << ", bus_to_stop.bus_name - " << bus_to_stop.bus_name
 				<< "; bus_to_stop_name - " << bus_to_stop.stop_name << std::endl;
-	}
+	}*/
 
 	Graph::Router<double> router(graph);
+	//return;
 
-	out << std::fixed << std::setprecision(5) << "[\n";
+	//out << std::fixed << std::setprecision(6) << "[\n";
+	out << "[\n";
 
 	size_t count = commands.size();
 	size_t n = 0;
@@ -270,7 +272,7 @@ void BusManager::WriteResponse(std::ostream& out) const {
 				if(route.items.size() == 0){
 					out << "\t\t\"error_message\": \"not found\"\n";
 				} else {
-					out << "\t\t\"total_time\": " << std::defaultfloat << route.total_time << ",\n";
+					out << "\t\t\"total_time\": " << route.total_time << ",\n";
 
 					size_t items_count = route.items.size();
 					size_t n = 0;
