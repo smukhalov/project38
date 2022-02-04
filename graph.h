@@ -28,25 +28,8 @@ namespace Graph {
     VertexId from;
     VertexId to;
     Weight weight;
+    RouteItemType route_item_type;
   };
-
-  /*struct VertexPair {
-	VertexId from;
-	VertexId to;
-
-  	bool operator == (const VertexPair& other) const {
-  		return from == other.from && to == other.to;
-  	}
-  };
-
-  struct VertexPairHasher {
-  	size_t operator() (const VertexPair& sp) const {
-  		size_t x = 2'946'901;
-  		return shash(sp.from) * x + shash(sp.to);
-  	}
-
-  	std::hash<size_t> shash;
-  };*/
 
   template <typename Weight>
   class DirectedWeightedGraph {

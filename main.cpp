@@ -9,7 +9,7 @@ using namespace std;
 int main(){
 	BusManager bm;
 
-	string inputFilePath = "/home/sergey/Books/coursera-c++brown-4/Экзамен - граф/transport-input3.json";
+	string inputFilePath = "/home/sergey/Books/coursera-c++brown-4/Экзамен - граф/transport-input2.json";
 	ifstream input(inputFilePath, ios::binary);
 	if(!input){
 		std::cout << "Не найден файл шаблона " << inputFilePath <<'\n';
@@ -33,7 +33,7 @@ int main(){
 		bm.WriteResponse(out_ss);
 	}
 
-	string outputFilePath = "/home/sergey/Books/coursera-c++brown-4/result3.json";
+	string outputFilePath = "/home/sergey/Books/coursera-c++brown-4/result2.json";
 	ofstream output(outputFilePath, ios::binary);
 
 	std::copy(

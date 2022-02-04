@@ -32,8 +32,8 @@ private:
 		size_t vertex_id;
 
 		bool operator == (const BusVertex& other) const {
-					return bus_name == other.bus_name && vertex_id == other.vertex_id;
-				}
+			return bus_name == other.bus_name && vertex_id == other.vertex_id;
+		}
 	};
 
 	struct BusVertexHasher {
@@ -66,7 +66,7 @@ private:
 		std::hash<size_t> size_t_hash;
 	};
 
-	std::unordered_map<size_t, BusStop> vertex_to_bus_stop;
+	std::unordered_map<size_t, std::unordered_set<BusStop, BusStopHasher>> vertex_to_bus_stop;
 	std::unordered_map<BusStop, size_t, BusStopHasher> bus_stop_to_vertex;
 
 	std::unordered_map<std::string, std::unordered_set<BusVertex, BusVertexHasher>> stop_to_bus_vertex;
@@ -75,6 +75,7 @@ private:
 	    size_t from;
 	    size_t to;
 	    double distance;
+	    RouteItemType route_item_type;
 
 	    bool operator == (const Edge& other) const {
 			return from == other.from && to == other.to;
@@ -116,5 +117,6 @@ private:
 	void FillEdgesRound(const Bus& bus);
 
 	double GetDistance(std::vector<std::string>::const_iterator it) const;
+	void AddEdge(const Edge& edge);
 
 };

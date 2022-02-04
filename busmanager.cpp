@@ -214,19 +214,23 @@ void BusManager::WriteResponse(std::ostream& out) const {
 	if(logging){
 		std::cout << "edges list\n";
 	}
-	for(const auto& [from, to, distance]: edges){
+	for(const auto& [from, to, distance, route_item_type]: edges){
 		if(logging){
-			std::cout << "from - " << from << ", to - " << to << "; distance - " << distance << std::endl;
+			std::cout << "from - " << from << ", to - " << to << "; distance - " << distance << "; route_item_type - "
+					<< (route_item_type == RouteItemType::Bus ? "Bus" : "Wait") << std::endl;
 		}
-		graph.AddEdge({from, to, distance});
+		graph.AddEdge({from, to, distance, route_item_type});
 	}
 
 	if(logging){
 		std::cout << std::endl;
 		std::cout << "vertex_to_bus_stop count - " << vertex_to_bus_stop.size() << "\n";
-		for(const auto& [vertex_id, bus_to_stop]: vertex_to_bus_stop){
-			std::cout << "vertex_id - " << vertex_id << ", bus_to_stop.bus_name - " << bus_to_stop.bus_name
-					<< "; bus_to_stop_name - " << bus_to_stop.stop_name << std::endl;
+		for(const auto& [vertex_id, bus_to_stop_set]: vertex_to_bus_stop){
+			std::cout << "vertex_id - " << vertex_id << std::endl;
+			for(const auto& bus_to_stop: bus_to_stop_set){
+				std::cout << "\t\tbus_to_stop.bus_name - " << bus_to_stop.bus_name
+									<< "; bus_to_stop_name - " << bus_to_stop.stop_name << std::endl;
+			}
 		}
 
 		std::cout << std::endl;
@@ -331,13 +335,19 @@ Route BusManager::BuildBestRoute(const RouteCommand& command,
 			const Bus& bus = buses.at(bus_name);
 			const std::vector<Bus::Stop>& stops = bus.stops;
 
-			auto it = std::find_if(stops.begin(), stops.end(), [&](const Bus::Stop& stop){return stop.stop_name == command.stop_from;});
-			if(it == stops.end()){
-				continue;
-			}
+			//В круговых маршрутах допускается несколько остановок с одинаковым названием. Находим их все
+			auto it = stops.begin();
+			while(true){
+				it = std::find_if(it, stops.end(), [&](const Bus::Stop& stop){return stop.stop_name == command.stop_from;});
+				if(it == stops.end()){
+					break;;
+				}
 
-			if(auto it_bus_stop = bus_stop_to_vertex.find({bus_name, it->stop_id}); it_bus_stop != bus_stop_to_vertex.end()){
-				vertex_from_list.push_back(it_bus_stop->second);
+				if(auto it_bus_stop = bus_stop_to_vertex.find({bus_name, it->stop_id}); it_bus_stop != bus_stop_to_vertex.end()){
+					vertex_from_list.push_back(it_bus_stop->second);
+				}
+
+				it = it + 1;
 			}
 		}
 	}
@@ -402,35 +412,79 @@ Route BusManager::BuildBestRoute(const RouteCommand& command,
 	rw.bus_wait_time = settings.bus_wait_time;
 
 	route.items.push_back(std::make_shared<RouteItemWait>(rw));
-	size_t temp_span_count = 0;
 
-	for(const Graph::EdgeId edge_id: route_edges) {
-		const Graph::Edge edge = graph.GetEdge(edge_id);
+	auto it_route_edges_begin = route_edges.begin();
+	auto it_route_edges_end = route_edges.end();
 
-		const BusStop& bus_stop_from = vertex_to_bus_stop.at(edge.from);
-		const BusStop& bus_stop_to = vertex_to_bus_stop.at(edge.to);
+	while(true) {
+		auto it_route_edges_end_current = std::find_if(it_route_edges_begin, it_route_edges_end, [&](const Graph::EdgeId& edge_id) {
+			const Graph::Edge<double>& edge = graph.GetEdge(edge_id);
+			return edge.route_item_type == RouteItemType::Wait;
+		});
 
-		if(bus_stop_from.stop_name == bus_stop_to.stop_name){
-			RouteItemWait rw;
-			rw.stop_name = bus_stop_from.stop_name;
-			rw.bus_wait_time = settings.bus_wait_time;
+		const Graph::Edge<double>& edge = graph.GetEdge(*it_route_edges_begin);
+		const auto& bus_stop_from_set = vertex_to_bus_stop.at(edge.from);
+		const auto& bus_stop_to_set = vertex_to_bus_stop.at(edge.to);
 
-			route.items.push_back(std::make_shared<RouteItemWait>(rw));
-			temp_span_count = 0;
-		} else {
-			if(temp_span_count == 0){
-				RouteItemBus rb;
-				rb.bus_number = bus_stop_from.bus_name;
-				rb.span_count = ++temp_span_count;
-				rb.bus_move_time = edge.weight;
+		std::vector<std::string> bus_range_list;
+		std::transform(bus_stop_from_set.begin(), bus_stop_from_set.end(), std::back_inserter(bus_range_list),
+				[](const BusStop& bus_stop){
+				return bus_stop.bus_name;
+		});
 
-				route.items.push_back(std::make_shared<RouteItemBus>(rb));
-			} else {
-				RouteItemBus* back_bus = ((RouteItemBus*)route.items.back().get());
-				back_bus->span_count = ++temp_span_count;
-				back_bus->bus_move_time += edge.weight;
+		uint32_t span_count = std::distance(it_route_edges_begin, it_route_edges_end_current);
+		double bus_move_time = edge.weight;
+
+		std::string stop_to = bus_stop_to_set.begin()->stop_name;
+		for(auto it = ++it_route_edges_begin; it != it_route_edges_end_current; ++it ){
+			const Graph::Edge<double>& edge = graph.GetEdge(*it);
+			bus_move_time += edge.weight;
+
+			const auto& bus_stop_from_set = vertex_to_bus_stop.at(edge.from);
+			const auto& bus_stop_to_set = vertex_to_bus_stop.at(edge.to);
+
+			stop_to = bus_stop_to_set.begin()->stop_name;
+
+			std::vector<std::string> buses_for_delete;
+			for(const std::string& bus_name: bus_range_list){
+				bool found = false;
+				for(const BusStop& bus_stop: bus_stop_from_set){
+					if(bus_name == bus_stop.bus_name){
+						found = true;
+						break;
+					}
+				}
+
+				if(!found){
+					buses_for_delete.push_back(bus_name);
+				}
+			}
+
+			for(const std::string bus_for_felete: buses_for_delete){
+				auto p = std::remove(bus_range_list.begin(), bus_range_list.end(), bus_for_felete);
+				bus_range_list.erase(p, bus_range_list.end());
 			}
 		}
+
+		assert(bus_range_list.size() > 0);
+
+		RouteItemBus rb;
+		rb.bus_number = bus_range_list[0];
+		rb.span_count = span_count;
+		rb.bus_move_time = bus_move_time;
+		route.items.push_back(std::make_shared<RouteItemBus>(rb));
+
+		if(it_route_edges_end_current == it_route_edges_end){
+			break;
+		}
+
+		RouteItemWait rw;
+		rw.stop_name = stop_to;
+		rw.bus_wait_time = settings.bus_wait_time;
+
+		route.items.push_back(std::make_shared<RouteItemWait>(rw));
+
+		it_route_edges_begin = it_route_edges_end_current + 1;
 	}
 
 	return route;
@@ -589,11 +643,11 @@ void BusManager::FillEdgesLine(const Bus& bus){
 
 		assert(vertex_1 >= 0 && vertex_2 >= 0);
 
-		vertex_to_bus_stop.insert({ vertex_1, {bus.name, stop_id_1, stop_name_1} });
-		vertex_to_bus_stop.insert({ vertex_2, {bus.name, stop_id_2, stop_name_2} });
+		vertex_to_bus_stop[vertex_1].insert({bus.name, stop_id_1, stop_name_1});
+		vertex_to_bus_stop[vertex_2].insert({bus.name, stop_id_2, stop_name_2});
 
-		edges.insert({vertex_1, vertex_2, distance_1_2});
-		edges.insert({vertex_2, vertex_1, distance_2_1});
+		AddEdge({vertex_1, vertex_2, distance_1_2, RouteItemType::Bus});
+		AddEdge({vertex_2, vertex_1, distance_2_1, RouteItemType::Bus});
 
 		if(auto it = stop_to_bus_vertex.find(stop_name_1); it != stop_to_bus_vertex.end()){
 			for(const BusVertex bus_vertex: it->second){
@@ -601,8 +655,8 @@ void BusManager::FillEdgesLine(const Bus& bus){
 					continue;
 				}
 
-				edges.insert({vertex_1, bus_vertex.vertex_id, settings.bus_wait_time});
-				edges.insert({bus_vertex.vertex_id, vertex_1, settings.bus_wait_time});
+				AddEdge({vertex_1, bus_vertex.vertex_id, settings.bus_wait_time, RouteItemType::Wait});
+				AddEdge({bus_vertex.vertex_id, vertex_1, settings.bus_wait_time, RouteItemType::Wait});
 			}
 		}
 
@@ -612,8 +666,8 @@ void BusManager::FillEdgesLine(const Bus& bus){
 					continue;
 				}
 
-				edges.insert({vertex_2, bus_vertex.vertex_id, settings.bus_wait_time});
-				edges.insert({bus_vertex.vertex_id, vertex_2, settings.bus_wait_time});
+				AddEdge({vertex_2, bus_vertex.vertex_id, settings.bus_wait_time, RouteItemType::Wait});
+				AddEdge({bus_vertex.vertex_id, vertex_2, settings.bus_wait_time, RouteItemType::Wait});
 			}
 		}
 
@@ -675,34 +729,30 @@ void BusManager::FillEdgesRound(const Bus& bus){
 
 		assert(vertex_1 >= 0 && vertex_2 >= 0);
 
-		vertex_to_bus_stop.insert({vertex_1, {bus.name, stop_id_1, stop_name_1}});
-		vertex_to_bus_stop.insert({vertex_2, {bus.name, stop_id_2, stop_name_2}});
+		vertex_to_bus_stop[vertex_1].insert({bus.name, stop_id_1, stop_name_1});
+		vertex_to_bus_stop[vertex_2].insert({bus.name, stop_id_2, stop_name_2});
 
-		edges.insert({vertex_1, vertex_2, distance_1_2});
+		AddEdge({vertex_1, vertex_2, distance_1_2, RouteItemType::Bus});
 
 		if(auto it = stop_to_bus_vertex.find(stop_name_1); it != stop_to_bus_vertex.end()){
 			for(const BusVertex bus_vertex: it->second){
 				if(bus_vertex.bus_name == bus.name && vertex_1 == bus_vertex.vertex_id){
-						/*&& (vertex_1 + 1 == bus_vertex.vertex_id
-							|| vertex_1 == bus_vertex.vertex_id || vertex_1 - 1 == bus_vertex.vertex_id)){*/
 					continue;
 				}
 
-				edges.insert({vertex_1, bus_vertex.vertex_id, settings.bus_wait_time});
-				edges.insert({bus_vertex.vertex_id, vertex_1, settings.bus_wait_time});
+				AddEdge({vertex_1, bus_vertex.vertex_id, settings.bus_wait_time, RouteItemType::Wait});
+				AddEdge({bus_vertex.vertex_id, vertex_1, settings.bus_wait_time, RouteItemType::Wait});
 			}
 		}
 
 		if(auto it = stop_to_bus_vertex.find(stop_name_2); it != stop_to_bus_vertex.end()){
 			for(const BusVertex bus_vertex: it->second){
 				if(bus_vertex.bus_name == bus.name && vertex_2 == bus_vertex.vertex_id){
-						/*&& (vertex_2 + 1 == bus_vertex.vertex_id
-							|| vertex_2 == bus_vertex.vertex_id || vertex_2 - 1 == bus_vertex.vertex_id)){*/
 					continue;
 				}
 
-				edges.insert({vertex_2, bus_vertex.vertex_id, settings.bus_wait_time});
-				edges.insert({bus_vertex.vertex_id, vertex_2, settings.bus_wait_time});
+				AddEdge({vertex_2, bus_vertex.vertex_id, settings.bus_wait_time, RouteItemType::Wait});
+				AddEdge({bus_vertex.vertex_id, vertex_2, settings.bus_wait_time, RouteItemType::Wait});
 			}
 		}
 
@@ -713,32 +763,61 @@ void BusManager::FillEdgesRound(const Bus& bus){
 		bus_stop_to_vertex.insert({{bus.name, stop_id_2, stop_name_2}, vertex_2});
 	}
 
-	//Остановка stops_for_bus.size()-2
-	const std::string& stop_name_m_2 = stops_for_bus[stop_count-2].stop_name;
-	const size_t& stop_id_m_2 = stops_for_bus[stop_count-2].stop_id;
+	//Остановка stops_for_bus.size()-2  -- stops_for_bus.size()-1
+	{
+		const std::string& stop_name_1 = stops_for_bus[stop_count-2].stop_name;
+		const size_t& stop_id_1 = stops_for_bus[stop_count-2].stop_id;
+		const size_t& vertex_1 = bus_stop_to_vertex.at({bus.name, stop_id_1});
 
-	const size_t& vertex_m_2 = bus_stop_to_vertex.at({bus.name, stop_id_m_2});
+		const std::string& stop_name_2 = stops_for_bus[stop_count-1].stop_name;
+		const size_t& stop_id_2 = stops_for_bus[stop_count-1].stop_id;
+		size_t vertex_2 = last_init_id++;
 
-	const std::string& stop_name = stops_for_bus[0].stop_name;
-	const size_t& stop_id = stops_for_bus[0].stop_id;
+		AddEdge({vertex_1, vertex_2,
+			stop_distances.at({stop_name_1, stop_name_2})/settings.bus_velocity, RouteItemType::Bus});
 
-	const size_t& stop_id_m_1 = stops_for_bus[stop_count-1].stop_id;
-	//Конечная остановка после полного обхода
-	size_t vertex_m_1 = last_init_id++;
+		vertex_to_bus_stop[vertex_1].insert({bus.name, stop_id_1, stop_name_1});
+		vertex_to_bus_stop[vertex_2].insert({bus.name, stop_id_2, stop_name_2});
 
-	double distance = stop_distances.at({stop_name_m_2, stop_name});
+		stop_to_bus_vertex[stop_name_1].insert({bus.name, vertex_1});
+		stop_to_bus_vertex[stop_name_2].insert({bus.name, vertex_2});
 
-	edges.insert({vertex_m_2, vertex_m_1, distance/settings.bus_velocity});
-	vertex_to_bus_stop.insert({vertex_m_1, {bus.name, stop_id, stop_name}});
+		bus_stop_to_vertex.insert({{bus.name, stop_id_1, stop_name_1}, vertex_1});
+		bus_stop_to_vertex.insert({{bus.name, stop_id_2, stop_name_2}, vertex_2});
+	}
 
-	stop_to_bus_vertex[stop_name_m_2].insert({bus.name, vertex_m_2});
-	bus_stop_to_vertex.insert({{bus.name, stop_id_m_2, stop_name_m_2}, vertex_m_2});
+	{
+		const std::string& stop_name_1 = stops_for_bus[stop_count-1].stop_name;
+		const size_t& stop_id_1 = stops_for_bus[stop_count-1].stop_id;
+		const size_t& vertex_1 = bus_stop_to_vertex.at({bus.name, stop_id_1});
 
-	size_t vertex_0 = bus_stop_to_vertex.at({bus.name, stop_id});
+		const std::string& stop_name_2 = stop_name_1;
+		const size_t& stop_id_2 = stops_for_bus[0].stop_id;
+		size_t vertex_2 = bus_stop_to_vertex.at({bus.name, stop_id_2});
 
-	edges.insert({vertex_m_1, vertex_0, settings.bus_wait_time});
-	vertex_to_bus_stop.insert({vertex_m_1, {bus.name, stop_id, stop_name}});
+		AddEdge({vertex_1, vertex_2, settings.bus_wait_time, RouteItemType::Wait});
 
-	stop_to_bus_vertex[stop_name].insert({bus.name, vertex_m_1});
-	bus_stop_to_vertex.insert({{bus.name, stop_id_m_1, stop_name}, vertex_m_1});
+		vertex_to_bus_stop[vertex_1].insert({bus.name, stop_id_1, stop_name_1});
+		vertex_to_bus_stop[vertex_2].insert({bus.name, stop_id_2, stop_name_2});
+
+		stop_to_bus_vertex[stop_name_1].insert({bus.name, vertex_1});
+		stop_to_bus_vertex[stop_name_2].insert({bus.name, vertex_2});
+
+		bus_stop_to_vertex.insert({{bus.name, stop_id_1, stop_name_1}, vertex_1});
+		bus_stop_to_vertex.insert({{bus.name, stop_id_2, stop_name_2}, vertex_2});
+	}
+}
+
+void BusManager::AddEdge(const Edge& edge){
+	auto it = edges.find({edge.from, edge.to});
+	if(it == edges.end()){
+		edges.insert({edge.from, edge.to, edge.distance, edge.route_item_type});
+		return;
+	}
+
+	if(it->distance < edge.distance){
+		return;
+	}
+
+	edges.insert({edge.from, edge.to, edge.distance, edge.route_item_type});
 }
